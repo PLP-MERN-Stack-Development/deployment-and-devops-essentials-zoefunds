@@ -1,77 +1,72 @@
-# Deployment and DevOps for MERN Applications
+What I added
+- .env.example — environment variable template for dev/staging/production
+- server/logger.js — Winston-based logger for production
+- server/health.js — /_health/live and /_health/ready endpoints for liveness/readiness
+- .github/workflows/ci-cd.yml — GitHub Actions workflow (lint, test, build, deploy placeholders)
+- README content and deployment checklist (this file)
 
-This assignment focuses on deploying a full MERN stack application to production, implementing CI/CD pipelines, and setting up monitoring for your application.
+Quick setup checklist (high-level)
+1. Create accounts:
+   - GitHub (repo & push access)
+   - MongoDB Atlas (create cluster, whitelist IPs or use VPC peering)
+   - Hosting:
+     - Backend: Render / Railway / Heroku (choose one)
+     - Frontend: Vercel / Netlify / GitHub Pages (choose one)
+   - (Optional) Sentry for error tracking
 
-## Assignment Overview
+2. MongoDB Atlas
+   - Create a cluster (Shared or Dedicated)
+   - Create a least-privileged DB user (readWrite on your DB)
+   - Get the connection string and set MONGODB_URI in production secrets
+   - Use MONGODB_POOL_SIZE to configure connection pooling (recommended 5-50 depending on load)
+   - Enable backups (Atlas provides scheduled snapshots)
 
-You will:
-1. Prepare your MERN application for production deployment
-2. Deploy the backend to a cloud platform
-3. Deploy the frontend to a static hosting service
-4. Set up CI/CD pipelines with GitHub Actions
-5. Implement monitoring and maintenance strategies
+3. Repo secrets (GitHub)
+   - MONGODB_URI (production)
+   - JWT_SECRET (production)
+   - SENTRY_DSN (optional)
+   - RENDER_API_KEY & RENDER_SERVICE_ID OR HEROKU_API_KEY & HEROKU_APP_NAME OR VERCEL_TOKEN & VERCEL_PROJECT_ID
+   - NODE_ENV=production (on the host)
 
-## Getting Started
+4. CI/CD (GitHub Actions)
+   - The workflow in .github/workflows/ci-cd.yml runs lint/test/build and then deploy jobs conditionally (staging/main).
+   - It expects deployment secrets listed above. Edit the placeholders in the workflow before use.
 
-1. Accept the GitHub Classroom assignment invitation
-2. Clone your personal repository that was created by GitHub Classroom
-3. Follow the setup instructions in the `Week7-Assignment.md` file
-4. Use the provided templates and configuration files as a starting point
+5. Frontend build and caching
+   - Run `npm run build` (React) to generate static assets.
+   - Use code splitting (React.lazy + Suspense or dynamic imports) — ensure your bundler outputs chunks.
+   - Configure static host (Vercel/Netlify): set cache headers for long-term assets and use hashed filenames for cache busting.
 
-## Files Included
+6. Backend production hardening
+   - Use Helmet for secure HTTP headers
+   - Enable CORS with proper origin policy
+   - Use HTTPS at the edge (platforms like Render/Vercel handle TLS)
+   - Implement rate limiting and request size limits (express-rate-limit, express.json({limit: '...'}) )
+   - Add robust error handler and avoid leaking stack traces to clients
 
-- `Week7-Assignment.md`: Detailed assignment instructions
-- `.github/workflows/`: GitHub Actions workflow templates
-- `deployment/`: Deployment configuration files and scripts
-- `.env.example`: Example environment variable templates
-- `monitoring/`: Monitoring configuration examples
+7. Monitoring & maintenance
+   - Sentry: capture errors on server and client
+   - Uptime: setup external uptime checks (UptimeRobot, Pingdom) to hit /_health/live and /_health/ready
+   - Performance: APM solutions (New Relic, Datadog) or lighter-weight Node exporters + Prometheus
+   - Logging: stream logs to an external service (Papertrail, LogDNA, Elastic Cloud) from platform
+   - Backups: enable MongoDB Atlas automated backups and test restore procedures regularly
 
-## Requirements
+Rollback strategy
+- Use your host's deployment history (Render/Heroku/Vercel allow rollbacks)
+- Keep tags/releases in GitHub; to rollback, re-deploy the last known-good tag
+- In CD: allow manual approvals before deploying to production if desired
 
-- A completed MERN stack application from previous weeks
-- Accounts on the following services:
-  - GitHub
-  - MongoDB Atlas
-  - Render, Railway, or Heroku (for backend)
-  - Vercel, Netlify, or GitHub Pages (for frontend)
-- Basic understanding of CI/CD concepts
+Security notes
+- Never commit .env with secrets
+- Use least-privilege DB users
+- Rotate secrets and API keys periodically
 
-## Deployment Platforms
+Where to edit after cloning
+- Fill .env.example values appropriate for development, and set real secrets in GitHub repo Settings → Secrets for Actions.
+- Edit .github/workflows/ci-cd.yml and replace placeholder IDs and endpoints with your service-specific values.
 
-### Backend Deployment Options
-- **Render**: Easy to use, free tier available
-- **Railway**: Developer-friendly, generous free tier
-- **Heroku**: Well-established, extensive documentation
+Example health endpoints
+- Liveness: GET /_health/live
+- Readiness: GET /_health/ready
 
-### Frontend Deployment Options
-- **Vercel**: Optimized for React apps, easy integration
-- **Netlify**: Great for static sites, good CI/CD
-- **GitHub Pages**: Free, integrated with GitHub
-
-## CI/CD Pipeline
-
-The assignment includes templates for setting up GitHub Actions workflows:
-- `frontend-ci.yml`: Tests and builds the React application
-- `backend-ci.yml`: Tests the Express.js backend
-- `frontend-cd.yml`: Deploys the frontend to your chosen platform
-- `backend-cd.yml`: Deploys the backend to your chosen platform
-
-## Submission
-
-Your work will be automatically submitted when you push to your GitHub Classroom repository. Make sure to:
-
-1. Complete all deployment tasks
-2. Set up CI/CD pipelines with GitHub Actions
-3. Deploy both frontend and backend to production
-4. Document your deployment process in the README.md
-5. Include screenshots of your CI/CD pipeline in action
-6. Add URLs to your deployed applications
-
-## Resources
-
-- [GitHub Actions Documentation](https://docs.github.com/en/actions)
-- [MongoDB Atlas Documentation](https://docs.atlas.mongodb.com/)
-- [Render Documentation](https://render.com/docs)
-- [Railway Documentation](https://docs.railway.app/)
-- [Vercel Documentation](https://vercel.com/docs)
-- [Netlify Documentation](https://docs.netlify.com/) 
+```

@@ -1,0 +1,151 @@
+# GitHub Actions CI/CD pipeline template.
+# - Runs on push and PR.
+# - Jobs: lint, test, build, package.
+# - Conditional deploy jobs for staging (branch: staging) and production (branch: main).
+#
+# NOTE: Replace placeholders (SERVICE IDs, tokens) and add the necessary secrets in
+# GitHub repo Settings -> Secrets and variables -> Actions.
+
+name: CI / CD
+
+on:
+  push:
+    branches:
+      - main
+      - staging
+  pull_request:
+    branches:
+      - main
+      - staging
+
+jobs:
+  setup:
+    name: Setup Node
+    runs-on: ubuntu-latest
+    outputs:
+      node-version: ${{ steps.node-version.outputs.node-version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Use Node.js
+        id: node-version
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: 'npm'
+
+  lint:
+    needs: setup
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18
+      - name: Install deps
+        run: npm ci
+      - name: Run linter
+        run: npm run lint
+
+  test:
+    needs: [setup, lint]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18
+      - name: Install dependencies
+        run: npm ci
+      - name: Run tests
+        run: npm test -- --coverage
+
+  build:
+    needs: [test]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18
+      - name: Install dependencies
+        run: npm ci
+      - name: Build backend
+        working-directory: ./server
+        run: |
+          npm ci
+          npm run build || echo "No backend build step"
+      - name: Build frontend
+        working-directory: ./client
+        run: |
+          npm ci
+          npm run build
+
+  deploy-staging:
+    if: github.ref == 'refs/heads/staging'
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Deploy backend to Render (example)
+        if: ${{ secrets.RENDER_API_KEY && secrets.RENDER_SERVICE_ID }}
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
+        run: |
+          echo "Triggering Render deploy via API..."
+          curl -X POST "https://api.render.com/v1/services/${SERVICE_ID}/deploys" \
+            -H "Authorization: Bearer ${RENDER_API_KEY}" \
+            -H "Content-Type: application/json" \
+            -d '{}' \
+            -s -o /dev/null -w "%{http_code}\n"
+
+      - name: Deploy frontend to Vercel (example)
+        if: ${{ secrets.VERCEL_TOKEN && secrets.VERCEL_ORG_ID && secrets.VERCEL_PROJECT_ID }}
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: |
+          echo "Deploying to Vercel using Vercel CLI..."
+          npm i -g vercel@28
+          cd client
+          vercel --token ${VERCEL_TOKEN} --confirm --prod
+
+  deploy-prod:
+    if: github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Deploy backend to Render (production)
+        if: ${{ secrets.RENDER_API_KEY && secrets.RENDER_SERVICE_ID_PROD }}
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID_PROD }}
+        run: |
+          echo "Triggering Render production deploy via API..."
+          curl -X POST "https://api.render.com/v1/services/${SERVICE_ID}/deploys" \
+            -H "Authorization: Bearer ${RENDER_API_KEY}" \
+            -H "Content-Type: application/json" \
+            -d '{}' \
+            -s -o /dev/null -w "%{http_code}\n"
+
+      - name: Deploy frontend to Vercel (production)
+        if: ${{ secrets.VERCEL_TOKEN && secrets.VERCEL_ORG_ID && secrets.VERCEL_PROJECT_ID_PROD }}
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID_PROD }}
+        run: |
+          echo "Deploying client to Vercel using Vercel CLI..."
+          npm i -g vercel@28
+          cd client
+          vercel --token ${VERCEL_TOKEN} --confirm --prod
+
+# Notes:
+# - Replace conditional checks and curl endpoints with your platform's API/action as needed.
+# - For Heroku you could use akshnz/heroku-deploy or make the platform API calls with HEROKU_API_KEY.
+# - Make sure relevant secrets exist in the repository (render tokens, vercel token, heroku key, etc.)
